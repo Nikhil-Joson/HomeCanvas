@@ -141,8 +141,9 @@ const ImageUploader = forwardRef<HTMLImageElement, ImageUploaderProps>(({ id, la
   
   const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
+      if (!isDropZone) return;
       setIsDraggingOver(true);
-      if (isDropZone && onProductDrop) {
+      if (onProductDrop) {
           const rect = event.currentTarget.getBoundingClientRect();
           setOrbPosition({
               x: event.clientX - rect.left,
@@ -180,7 +181,7 @@ const ImageUploader = forwardRef<HTMLImageElement, ImageUploaderProps>(({ id, la
       }
   }, [isDropZone, onProductDrop, onFileSelect, handlePlacement]);
   
-  const showHoverState = isDraggingOver || isTouchHovering;
+  const showHoverState = isDropZone && (isDraggingOver || isTouchHovering);
   const currentOrbPosition = orbPosition || touchOrbPosition;
   
   const cursorClass = isDropZone ? 'cursor-crosshair' : 'cursor-pointer';

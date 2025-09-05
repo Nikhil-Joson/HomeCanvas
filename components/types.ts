@@ -8,3 +8,14 @@ export interface Product {
   name: string;
   imageUrl: string;
 }
+
+export interface StagedProduct {
+  file: File;
+  imageUrl: string;
+  x: number;
+  y: number;
+  xPercent: number;
+  yPercent: number;
+  scale: number;
+  width: number;
+}

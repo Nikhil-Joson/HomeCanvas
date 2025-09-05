@@ -258,7 +258,7 @@ const markImage = async (
  * @param objectDescription A text description of the object.
  * @param environmentImage The file for the background environment.
  * @param environmentDescription A text description of the environment.
- * @param dropPosition The relative x/y coordinates (0-100) where the product was dropped.
+ * @param placementConfig The placement details including position and scale.
  * @returns A promise that resolves to an object containing the base64 data URL of the generated image and the debug image.
  */
 export const generateCompositeImage = async (
@@ -266,7 +266,7 @@ export const generateCompositeImage = async (
     objectDescription: string,
     environmentImage: File,
     environmentDescription: string,
-    dropPosition: { xPercent: number; yPercent: number; }
+    placementConfig: { xPercent: number; yPercent: number; scale: number; }
 ): Promise<{ finalImageUrl: string; debugImageUrl: string; finalPrompt: string; }> => {
   console.log('Starting multi-step image generation process...');
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
@@ -285,7 +285,7 @@ export const generateCompositeImage = async (
   // STEP 2: Mark the resized scene image for the description model and debug view
   console.log('Marking scene image for analysis...');
   // Pass original dimensions to correctly calculate marker position on the padded image
-  const markedResizedEnvironmentImage = await markImage(resizedEnvironmentImage, dropPosition, { originalWidth, originalHeight });
+  const markedResizedEnvironmentImage = await markImage(resizedEnvironmentImage, placementConfig, { originalWidth, originalHeight });
 
   // The debug image is now the marked one.
   const debugImageUrl = await fileToDataUrl(markedResizedEnvironmentImage);
@@ -337,25 +337,42 @@ Provide only the two descriptions concatenated in a few sentences.
   const objectImagePart = await fileToPart(resizedObjectImage);
   const cleanEnvironmentImagePart = await fileToPart(resizedEnvironmentImage); // IMPORTANT: Use clean image
   
+  const { scale } = placementConfig;
+
+  let scaleInstruction = "The product should be scaled appropriately to a realistic size for the scene.";
+  if (scale !== 1) {
+    const percentage = Math.round((scale - 1) * 100);
+    if (percentage > 0) {
+      scaleInstruction = `The product MUST be scaled to appear approximately ${percentage}% larger than its default proportional size.`;
+    } else {
+      scaleInstruction = `The product MUST be scaled to appear approximately ${-percentage}% smaller than its default proportional size.`;
+    }
+  }
+  
   const prompt = `
-**Role:**
-You are a visual composition expert. Your task is to take a 'product' image and seamlessly integrate it into a 'scene' image, adjusting for perspective, lighting, and scale.
+**TASK:**
+You are a master photo editor. Your task is to perfectly integrate the 'product' image into the 'scene' image.
 
-**Specifications:**
--   **Product to add:**
-    The first image provided. It may be surrounded by black padding or background, which you should ignore and treat as transparent and only keep the product.
--   **Scene to use:**
-    The second image provided. It may also be surrounded by black padding, which you should ignore.
--   **Placement Instruction (Crucial):**
-    -   You must place the product at the location described below exactly. You should only place the product once. Use this dense, semantic description to find the exact spot in the scene.
-    -   **Product location Description:** "${semanticLocationDescription}"
--   **Final Image Requirements:**
-    -   The output image's style, lighting, shadows, reflections, and camera perspective must exactly match the original scene.
-    -   Do not just copy and paste the product. You must intelligently re-render it to fit the context. Adjust the product's perspective and orientation to its most natural position, scale it appropriately, and ensure it casts realistic shadows according to the scene's light sources.
-    -   The product must have proportional realism. For example, a lamp product can't be bigger than a sofa in scene.
-    -   You must not return the original scene image without product placement. The product must be always present in the composite image.
+**IMAGE ROLES:**
+- **Image 1 (Product):** This is the object to be placed. Ignore its background completely.
+- **Image 2 (Scene):** This is the environment for the product.
 
-The output should ONLY be the final, composed image. Do not add any text or explanation.
+**CRITICAL EXECUTION ORDER (Follow these steps exactly):**
+
+1.  **TRANSFORMATION (APPLY FIRST):** Before placing the product, you MUST apply the following transformations:
+    - **Scale:** ${scaleInstruction}
+
+2.  **PLACEMENT (APPLY SECOND):** Place the fully transformed product at this precise location in the scene: "${semanticLocationDescription}". Do not deviate from this location.
+
+3.  **INTEGRATION (APPLY LAST):**
+    - The final image's style, lighting, shadows, reflections, and camera perspective MUST perfectly match the original scene.
+    - You must re-render the product to fit the context, casting realistic shadows and receiving scene lighting.
+    - Ensure the final product size is proportional and realistic for the environment.
+    - The product MUST be clearly visible in the final image.
+
+**FINAL OUTPUT RULES:**
+- The output MUST be the final, composed image ONLY.
+- DO NOT output any text, descriptions, explanations, or analysis.
 `;
 
   const textPart = { text: prompt };

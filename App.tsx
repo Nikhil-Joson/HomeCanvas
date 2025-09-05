@@ -6,7 +6,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { generateCompositeImage, editImageWithChat } from './services/geminiService';
 // Fix: Corrected import path for Product type.
-import { Product } from './components/types';
+import { Product, StagedProduct } from './components/types';
 import Header from './components/Header';
 import ImageUploader from './components/ImageUploader';
 import ObjectCard from './components/ObjectCard';
@@ -14,6 +14,7 @@ import Spinner from './components/Spinner';
 import DebugModal from './components/DebugModal';
 import TouchGhost from './components/TouchGhost';
 import Chat from './components/Chat';
+import PlacementGizmo from './components/PlacementGizmo';
 
 // Pre-load a transparent image to use for hiding the default drag ghost.
 // This prevents a race condition on the first drag.
@@ -76,6 +77,10 @@ const App: React.FC = () => {
   const [isHoveringDropZone, setIsHoveringDropZone] = useState<boolean>(false);
   const [touchOrbPosition, setTouchOrbPosition] = useState<{x: number, y: number} | null>(null);
   const sceneImgRef = useRef<HTMLImageElement>(null);
+  const sceneContainerRef = useRef<HTMLDivElement>(null);
+  
+  // State for interactive product placement
+  const [stagedProduct, setStagedProduct] = useState<StagedProduct | null>(null);
   
   // Derived state from history
   const sceneImage = sceneHistory[currentSceneIndex] ?? null;
@@ -166,31 +171,60 @@ const App: React.FC = () => {
       console.error(err);
     }
   }, [handleProductImageUpload]);
+  
+  const handleProductDrop = useCallback((position: {x: number, y: number}, relativePosition: { xPercent: number; yPercent: number; }) => {
+    if (!productImageFile || !selectedProduct) return;
+    setStagedProduct({
+      file: productImageFile,
+      imageUrl: selectedProduct.imageUrl,
+      x: position.x,
+      y: position.y,
+      xPercent: relativePosition.xPercent,
+      yPercent: relativePosition.yPercent,
+      scale: 1,
+      width: 150, // Initial width, can be adjusted
+    });
+  }, [productImageFile, selectedProduct]);
+  
+  const handlePlacementUpdate = (updates: Partial<StagedProduct>) => {
+    setStagedProduct(prev => prev ? { ...prev, ...updates } : null);
+  };
+  
+  const handlePlacementCancel = () => {
+    setStagedProduct(null);
+  };
 
-  const handleProductDrop = useCallback(async (position: {x: number, y: number}, relativePosition: { xPercent: number; yPercent: number; }) => {
-    if (!productImageFile || !sceneImage || !selectedProduct) {
-      setError('An unexpected error occurred. Please try again.');
+  const handlePlacementConfirm = useCallback(async () => {
+    if (!stagedProduct || !sceneImage || !selectedProduct) {
+      setError('An unexpected error occurred during placement. Please try again.');
       return;
     }
-    setPersistedOrbPosition(position);
+    
+    // Persist orb at the final confirmed position
+    setPersistedOrbPosition({ x: stagedProduct.x, y: stagedProduct.y });
+    
     setIsLoading(true);
     setError(null);
+    setStagedProduct(null); // Hide gizmo
     
     try {
       const { finalImageUrl, debugImageUrl, finalPrompt } = await generateCompositeImage(
-        productImageFile, 
+        stagedProduct.file, 
         selectedProduct.name,
         sceneImage,
         sceneImage.name,
-        relativePosition
+        { 
+          xPercent: stagedProduct.xPercent, 
+          yPercent: stagedProduct.yPercent,
+          scale: stagedProduct.scale,
+        }
       );
       setDebugImageUrl(debugImageUrl);
       setDebugPrompt(finalPrompt);
       const newSceneFile = dataURLtoFile(finalImageUrl, `generated-scene-${Date.now()}.jpeg`);
-      updateSceneImage(newSceneFile); // Add new image to history
+      updateSceneImage(newSceneFile);
 
-    } catch (err)
- {
+    } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       setError(`Failed to generate the image. ${errorMessage}`);
       console.error(err);
@@ -198,7 +232,7 @@ const App: React.FC = () => {
       setIsLoading(false);
       setPersistedOrbPosition(null);
     }
-  }, [productImageFile, sceneImage, selectedProduct]);
+  }, [stagedProduct, sceneImage, selectedProduct]);
 
 
   const handleReset = useCallback(() => {
@@ -213,6 +247,7 @@ const App: React.FC = () => {
     setPersistedOrbPosition(null);
     setDebugImageUrl(null);
     setDebugPrompt(null);
+    setStagedProduct(null);
   }, []);
 
   const handleChangeProduct = useCallback(() => {
@@ -222,6 +257,7 @@ const App: React.FC = () => {
     setPersistedOrbPosition(null);
     setDebugImageUrl(null);
     setDebugPrompt(null);
+    setStagedProduct(null);
     // Don't reset scene or chat
   }, []);
   
@@ -232,6 +268,7 @@ const App: React.FC = () => {
     setPersistedOrbPosition(null);
     setDebugImageUrl(null);
     setDebugPrompt(null);
+    setStagedProduct(null);
   }, []);
 
   const handleChatSubmit = async (prompt: string, imageContext: 'current' | 'previous') => {
@@ -302,7 +339,7 @@ const App: React.FC = () => {
   }, [isLoading]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || stagedProduct) return;
     // Prevent page scroll
     e.preventDefault();
     setIsTouchDragging(true);
@@ -461,13 +498,17 @@ const App: React.FC = () => {
               <>
                 <div className="flex-grow flex items-center justify-center">
                   <div 
-                      draggable="true" 
+                      draggable={!stagedProduct} 
                       onDragStart={(e) => {
+                          if (stagedProduct) {
+                            e.preventDefault();
+                            return;
+                          }
                           e.dataTransfer.effectAllowed = 'move';
                           e.dataTransfer.setDragImage(transparentDragImage, 0, 0);
                       }}
                       onTouchStart={handleTouchStart}
-                      className="cursor-move w-full max-w-xs"
+                      className={`cursor-move w-full max-w-xs ${stagedProduct ? 'opacity-50' : ''}`}
                   >
                       <ObjectCard product={selectedProduct} isSelected={true} />
                   </div>
@@ -494,13 +535,13 @@ const App: React.FC = () => {
           {/* Scene Column */}
           <div className="md:col-span-2 flex flex-col">
             <h2 className="text-2xl font-extrabold text-center mb-5 text-zinc-800">Scene</h2>
-            <div className="flex-grow flex items-center justify-center">
+            <div ref={sceneContainerRef} className="flex-grow flex items-center justify-center relative">
               <ImageUploader 
                   ref={sceneImgRef}
                   id="scene-uploader" 
                   onFileSelect={setSceneFile} 
                   imageUrl={sceneImageUrl}
-                  isDropZone={!!productImageFile && !isLoading}
+                  isDropZone={!!productImageFile && !isLoading && !stagedProduct}
                   onProductDrop={handleProductDrop}
                   persistedOrbPosition={persistedOrbPosition}
                   showDebugButton={!!debugImageUrl && !isLoading}
@@ -512,6 +553,15 @@ const App: React.FC = () => {
                   canUndo={canSceneUndo}
                   canRedo={canSceneRedo}
               />
+              {stagedProduct && sceneContainerRef.current && (
+                <PlacementGizmo
+                  bounds={sceneContainerRef.current.getBoundingClientRect()}
+                  product={stagedProduct}
+                  onUpdate={handlePlacementUpdate}
+                  onConfirm={handlePlacementConfirm}
+                  onCancel={handlePlacementCancel}
+                />
+              )}
             </div>
             <div className="text-center mt-4">
               <div className="h-5 flex items-center justify-center">
@@ -535,7 +585,11 @@ const App: React.FC = () => {
              </div>
            ) : (
             <div className="w-full">
-              {productImageFile ? (
+              {stagedProduct ? (
+                 <p className="text-zinc-500 animate-fade-in mb-4">
+                    Adjust the product's position and scale, then confirm your placement.
+                </p>
+              ) : productImageFile ? (
                 <p className="text-zinc-500 animate-fade-in mb-4">
                     Drag the product onto the scene, <b>or</b> use the chatbot below to edit the scene first.
                 </p>
@@ -544,12 +598,14 @@ const App: React.FC = () => {
                   Use the chatbot to edit the scene, or upload a product to place it.
                 </p>
               )}
-              <Chat 
-                onChatSubmit={handleChatSubmit} 
-                isLoading={isChatLoading} 
-                history={chatHistory} 
-                hasPreviousImage={!!previousSceneImage}
-              />
+              {!stagedProduct && (
+                <Chat 
+                  onChatSubmit={handleChatSubmit} 
+                  isLoading={isChatLoading} 
+                  history={chatHistory} 
+                  hasPreviousImage={!!previousSceneImage}
+                />
+              )}
             </div>
            )}
         </div>
