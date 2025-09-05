@@ -8,6 +8,7 @@ import React, { useState, useEffect, useRef } from 'react';
 interface ChatMessage {
     role: 'user' | 'model';
     text: string;
+    imageUrl?: string;
 }
 
 interface ChatProps {
@@ -95,7 +96,14 @@ const Chat: React.FC<ChatProps> = ({ onChatSubmit, isLoading, history, hasPrevio
                 ) : (
                     history.map((msg, index) => (
                         <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
-                            <div className={`max-w-xs md:max-w-md lg:max-w-lg px-4 py-2 rounded-xl shadow-sm ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-zinc-200 text-zinc-800'}`}>
+                            <div className={`max-w-xs md:max-w-md lg:max-w-lg px-4 py-2 rounded-xl shadow-sm ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-zinc-200 text-zinc-800'} ${msg.imageUrl && msg.role === 'user' ? 'flex flex-col gap-2' : ''}`}>
+                                {msg.imageUrl && msg.role === 'user' && (
+                                    <img 
+                                      src={msg.imageUrl}
+                                      alt="User attachment"
+                                      className="rounded-md w-40 aspect-video object-cover"
+                                    />
+                                )}
                                 <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                             </div>
                         </div>

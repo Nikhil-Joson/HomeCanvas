@@ -24,6 +24,7 @@ transparentDragImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BA
 interface ChatMessage {
     role: 'user' | 'model';
     text: string;
+    imageUrl?: string;
 }
 
 // Helper to convert a data URL string to a File object
@@ -236,6 +237,12 @@ const App: React.FC = () => {
 
 
   const handleReset = useCallback(() => {
+    // Revoke any existing object URLs in chat history before clearing
+    chatHistory.forEach(msg => {
+        if (msg.imageUrl && msg.imageUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(msg.imageUrl);
+        }
+    });
     // Let useEffect handle URL revocation
     setSelectedProduct(null);
     setProductImageFile(null);
@@ -248,7 +255,7 @@ const App: React.FC = () => {
     setDebugImageUrl(null);
     setDebugPrompt(null);
     setStagedProduct(null);
-  }, []);
+  }, [chatHistory]);
 
   const handleChangeProduct = useCallback(() => {
     // Let useEffect handle URL revocation
@@ -262,6 +269,12 @@ const App: React.FC = () => {
   }, []);
   
   const handleChangeScene = useCallback(() => {
+    // Revoke any existing object URLs in chat history before clearing
+    chatHistory.forEach(msg => {
+        if (msg.imageUrl && msg.imageUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(msg.imageUrl);
+        }
+    });
     setSceneHistory([]);
     setCurrentSceneIndex(-1);
     setChatHistory([]);
@@ -269,7 +282,7 @@ const App: React.FC = () => {
     setDebugImageUrl(null);
     setDebugPrompt(null);
     setStagedProduct(null);
-  }, []);
+  }, [chatHistory]);
 
   const handleChatSubmit = async (prompt: string, imageContext: 'current' | 'previous', chatImageFile: File | null) => {
     const imageToEdit = imageContext === 'current' ? sceneImage : previousSceneImage;
@@ -279,7 +292,12 @@ const App: React.FC = () => {
     }
 
     setIsChatLoading(true);
-    updateChatHistory([{ role: 'user', text: prompt }]);
+    
+    const userMessage: ChatMessage = { role: 'user', text: prompt };
+    if (chatImageFile) {
+        userMessage.imageUrl = URL.createObjectURL(chatImageFile);
+    }
+    updateChatHistory([userMessage]);
 
     try {
         const { text, imageUrl } = await editImageWithChat(prompt, imageToEdit, chatImageFile);
