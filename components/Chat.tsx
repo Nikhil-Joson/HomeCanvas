@@ -11,7 +11,7 @@ interface ChatMessage {
 }
 
 interface ChatProps {
-    onChatSubmit: (prompt: string, imageContext: 'current' | 'previous') => void;
+    onChatSubmit: (prompt: string, imageContext: 'current' | 'previous', chatImageFile: File | null) => void;
     isLoading: boolean;
     history: ChatMessage[];
     hasPreviousImage: boolean;
@@ -23,10 +23,25 @@ const SendIcon = () => (
     </svg>
 );
 
+const AttachmentIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M8 4a3 3 0 00-3 3v4a3 3 0 006 0V7a1 1 0 112 0v4a5 5 0 01-10 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z" clipRule="evenodd" />
+    </svg>
+);
+
+const CloseIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+    </svg>
+);
+
+
 const Chat: React.FC<ChatProps> = ({ onChatSubmit, isLoading, history, hasPreviousImage }) => {
     const [message, setMessage] = useState('');
     const [imageContext, setImageContext] = useState<'current' | 'previous'>('current');
+    const [chatImageFile, setChatImageFile] = useState<File | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -43,8 +58,26 @@ const Chat: React.FC<ChatProps> = ({ onChatSubmit, isLoading, history, hasPrevio
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (message.trim() && !isLoading) {
-            onChatSubmit(message, imageContext);
+            onChatSubmit(message, imageContext, chatImageFile);
             setMessage('');
+            setChatImageFile(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setChatImageFile(file);
+        }
+    };
+    
+    const removeAttachment = () => {
+        setChatImageFile(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
         }
     };
 
@@ -77,7 +110,26 @@ const Chat: React.FC<ChatProps> = ({ onChatSubmit, isLoading, history, hasPrevio
                         <button type="button" onClick={() => setImageContext('current')} className={`${baseButtonClasses} ${imageContext === 'current' ? activeButtonClasses : inactiveButtonClasses}`} disabled={isLoading}>Current</button>
                         <button type="button" onClick={() => setImageContext('previous')} className={`${baseButtonClasses} ${imageContext === 'previous' ? activeButtonClasses : inactiveButtonClasses}`} disabled={!hasPreviousImage || isLoading}>Previous</button>
                     </div>
+                    {chatImageFile && (
+                        <div className="mb-2 flex items-center justify-between bg-blue-100 text-blue-800 text-sm font-medium px-3 py-1.5 rounded-lg animate-fade-in">
+                            <span>{chatImageFile.name}</span>
+                            <button onClick={removeAttachment} type="button" className="ml-2 p-1 rounded-full hover:bg-blue-200" aria-label="Remove attachment">
+                                <CloseIcon />
+                            </button>
+                        </div>
+                    )}
                     <div className="flex items-center space-x-2">
+                        <input
+                           ref={fileInputRef}
+                           type="file"
+                           className="hidden"
+                           accept="image/png, image/jpeg, image/webp"
+                           onChange={handleFileChange}
+                           id="chat-file-input"
+                        />
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="text-zinc-500 hover:text-blue-600 p-2.5 rounded-md transition-colors disabled:opacity-50" disabled={isLoading} aria-label="Attach file">
+                            <AttachmentIcon />
+                        </button>
                         <input
                             type="text"
                             value={message}

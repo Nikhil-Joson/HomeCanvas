@@ -4,7 +4,7 @@
 */
 
 
-import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Modality, Part } from "@google/genai";
 
 // Helper to get intrinsic image dimensions from a File object
 const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
@@ -410,14 +410,57 @@ You are a master photo editor. Your task is to perfectly integrate the 'product'
 
 export const editImageWithChat = async (
     prompt: string,
-    imageToEdit: File
+    imageToEdit: File,
+    newContentImage: File | null
 ): Promise<{ text: string | null; imageUrl: string | null; }> => {
     console.log('Starting image editing with chat prompt...');
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
     
-    const imagePart = await fileToPart(imageToEdit);
+    // Define standard dimension for model inputs
+    const MAX_DIMENSION = 1024;
     
-    const fullPrompt = `
+    // Get original scene dimensions for final cropping
+    const { width: originalWidth, height: originalHeight } = await getImageDimensions(imageToEdit);
+
+    const parts: Part[] = [];
+    
+    // Resize the main image to edit and add it to parts
+    console.log('Resizing scene image for chat edit...');
+    const resizedImageToEdit = await resizeImage(imageToEdit, MAX_DIMENSION);
+    const imageToEditPart = await fileToPart(resizedImageToEdit);
+    parts.push(imageToEditPart);
+    
+    // If there's a second image (e.g., a texture), resize it and add to parts
+    if (newContentImage) {
+        console.log('Resizing content image for chat edit...');
+        const resizedNewContentImage = await resizeImage(newContentImage, MAX_DIMENSION);
+        const newContentImagePart = await fileToPart(resizedNewContentImage);
+        parts.push(newContentImagePart);
+    }
+
+    let fullPrompt = '';
+    if (newContentImage) {
+        fullPrompt = `
+**Role:** You are a helpful and expert AI photo editor.
+**Task:** Your ONLY task is to edit the 'scene' image based on the user's request, using content from the 'content' image.
+**IMAGE ROLES:**
+- **Image 1 (Scene):** This is the main image that you MUST edit.
+- **Image 2 (Content):** This image provides the texture, pattern, or object to be used in the edit. For example, it could be a wallpaper pattern or a new painting.
+
+**User's Request:** "${prompt}"
+
+**Instructions:**
+- Analyze the user's request to understand how to apply the 'content' image to the 'scene' image.
+- For example, if the user says "change the wallpaper on the right wall", use the pattern from the 'content' image and apply it as wallpaper to the right wall in the 'scene' image.
+- The integration MUST be photorealistic, matching the scene's lighting, perspective, and shadows.
+
+**Output Requirements:**
+1.  **MUST** return the final, edited image.
+2.  **MUST** also return a short, friendly text response confirming the exact change you made.
+If you are unable to fulfill the request, you must explain why in the text response and do not return an edited image.
+`;
+    } else {
+        fullPrompt = `
 **Role:** You are a helpful and expert AI photo editor.
 **Task:** Your ONLY task is to edit the single image provided, based on the user's request. Do not add any new objects unless explicitly asked.
 **User's Request:** "${prompt}"
@@ -427,13 +470,16 @@ export const editImageWithChat = async (
 2.  **MUST** also return a short, friendly text response confirming the exact change you made.
 If you are unable to fulfill the request, you must explain why in the text response and do not return an edited image.
 `;
-    const textPart = { text: fullPrompt };
+    }
     
-    console.log('Sending image and prompt for editing...');
+    const textPart = { text: fullPrompt };
+    parts.push(textPart);
+    
+    console.log('Sending resized image(s) and prompt for editing...');
     
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image-preview',
-        contents: { parts: [imagePart, textPart] },
+        contents: { parts },
         config: {
             responseModalities: [Modality.IMAGE, Modality.TEXT],
         },
@@ -442,24 +488,33 @@ If you are unable to fulfill the request, you must explain why in the text respo
     console.log('Received response for image editing.');
     
     let text: string | null = null;
-    let imageUrl: string | null = null;
+    let finalImageUrl: string | null = null;
     
-    const parts = response.candidates?.[0]?.content?.parts;
-    if (parts) {
-        for (const part of parts) {
+    const responseParts = response.candidates?.[0]?.content?.parts;
+    if (responseParts) {
+        for (const part of responseParts) {
             if (part.text) {
                 text = part.text;
             } else if (part.inlineData) {
                 const { mimeType, data } = part.inlineData;
-                imageUrl = `data:${mimeType};base64,${data}`;
+                const generatedSquareImageUrl = `data:${mimeType};base64,${data}`;
+                
+                // Crop the generated square image back to the original aspect ratio
+                console.log('Cropping generated chat image to original aspect ratio...');
+                finalImageUrl = await cropToOriginalAspectRatio(
+                    generatedSquareImageUrl,
+                    originalWidth,
+                    originalHeight,
+                    MAX_DIMENSION
+                );
             }
         }
     }
     
-    if (!text && !imageUrl) {
+    if (!text && !finalImageUrl) {
         console.error("Model response did not contain text or an image part.", response);
         throw new Error("The AI model did not return an edited image or a text response.");
     }
     
-    return { text, imageUrl };
+    return { text, imageUrl: finalImageUrl };
 };

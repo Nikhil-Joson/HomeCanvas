@@ -271,7 +271,7 @@ const App: React.FC = () => {
     setStagedProduct(null);
   }, []);
 
-  const handleChatSubmit = async (prompt: string, imageContext: 'current' | 'previous') => {
+  const handleChatSubmit = async (prompt: string, imageContext: 'current' | 'previous', chatImageFile: File | null) => {
     const imageToEdit = imageContext === 'current' ? sceneImage : previousSceneImage;
     if (!imageToEdit) {
         updateChatHistory([{ role: 'model', text: "There is no image to edit in that context." }]);
@@ -282,7 +282,7 @@ const App: React.FC = () => {
     updateChatHistory([{ role: 'user', text: prompt }]);
 
     try {
-        const { text, imageUrl } = await editImageWithChat(prompt, imageToEdit);
+        const { text, imageUrl } = await editImageWithChat(prompt, imageToEdit, chatImageFile);
 
         const modelResponses: ChatMessage[] = [];
         if (text) {
