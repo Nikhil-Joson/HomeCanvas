@@ -91,16 +91,12 @@ const App: React.FC = () => {
   const handleSceneUndo = useCallback(() => {
     if (canSceneUndo) {
       setCurrentSceneIndex(prev => prev - 1);
-      // Reset chat when undoing a scene change to keep context clear
-      setChatHistory([]);
     }
   }, [canSceneUndo]);
 
   const handleSceneRedo = useCallback(() => {
     if (canSceneRedo) {
       setCurrentSceneIndex(prev => prev + 1);
-      // Reset chat when redoing a scene change
-      setChatHistory([]);
     }
   }, [canSceneRedo]);
   
@@ -179,9 +175,7 @@ const App: React.FC = () => {
     setPersistedOrbPosition(position);
     setIsLoading(true);
     setError(null);
-    // Reset chat on new placement
-    setChatHistory([]);
-
+    
     try {
       const { finalImageUrl, debugImageUrl, finalPrompt } = await generateCompositeImage(
         productImageFile, 
@@ -412,12 +406,12 @@ const App: React.FC = () => {
         );
     }
     
-    if (!productImageFile || !sceneImage) {
+    if (!sceneImage) {
       return (
         <div className="w-full max-w-6xl mx-auto animate-fade-in">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
             <div className="flex flex-col">
-              <h2 className="text-2xl font-extrabold text-center mb-5 text-zinc-800">Upload Product</h2>
+              <h2 className="text-2xl font-extrabold text-center mb-5 text-zinc-800">Upload Product (Optional)</h2>
               <ImageUploader 
                 id="product-uploader"
                 onFileSelect={handleProductImageUpload}
@@ -435,7 +429,7 @@ const App: React.FC = () => {
           </div>
           <div className="text-center mt-10 min-h-[4rem] flex flex-col justify-center items-center">
             <p className="text-zinc-500 animate-fade-in">
-              Upload a product image and a scene image to begin.
+              Upload a scene image to begin editing with the AI chatbot.
             </p>
             <p className="text-zinc-500 animate-fade-in mt-2">
               Or click{' '}
@@ -448,7 +442,7 @@ const App: React.FC = () => {
               {' '}for an instant start.
             </p>
             <p className="text-zinc-400 text-sm animate-fade-in mt-4">
-              Note: The AI chatbot for editing will appear once a scene is ready.
+              You can upload a product now or after you've edited the scene.
             </p>
           </div>
         </div>
@@ -460,30 +454,42 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
           {/* Product Column */}
           <div className="md:col-span-1 flex flex-col">
-            <h2 className="text-2xl font-extrabold text-center mb-5 text-zinc-800">Product</h2>
-            <div className="flex-grow flex items-center justify-center">
-              <div 
-                  draggable="true" 
-                  onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = 'move';
-                      e.dataTransfer.setDragImage(transparentDragImage, 0, 0);
-                  }}
-                  onTouchStart={handleTouchStart}
-                  className="cursor-move w-full max-w-xs"
-              >
-                  <ObjectCard product={selectedProduct!} isSelected={true} />
-              </div>
-            </div>
-            <div className="text-center mt-4">
-               <div className="h-5 flex items-center justify-center">
-                <button
-                    onClick={handleChangeProduct}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-semibold"
-                >
-                    Change Product
-                </button>
-               </div>
-            </div>
+            <h2 className="text-2xl font-extrabold text-center mb-5 text-zinc-800">
+              {productImageFile ? 'Product' : 'Upload Product'}
+            </h2>
+            {productImageFile && selectedProduct ? (
+              <>
+                <div className="flex-grow flex items-center justify-center">
+                  <div 
+                      draggable="true" 
+                      onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setDragImage(transparentDragImage, 0, 0);
+                      }}
+                      onTouchStart={handleTouchStart}
+                      className="cursor-move w-full max-w-xs"
+                  >
+                      <ObjectCard product={selectedProduct} isSelected={true} />
+                  </div>
+                </div>
+                <div className="text-center mt-4">
+                  <div className="h-5 flex items-center justify-center">
+                    <button
+                        onClick={handleChangeProduct}
+                        className="text-sm text-blue-600 hover:text-blue-800 font-semibold"
+                    >
+                        Change Product
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+               <ImageUploader 
+                id="product-uploader-main"
+                onFileSelect={handleProductImageUpload}
+                imageUrl={null}
+              />
+            )}
           </div>
           {/* Scene Column */}
           <div className="md:col-span-2 flex flex-col">
@@ -494,7 +500,7 @@ const App: React.FC = () => {
                   id="scene-uploader" 
                   onFileSelect={setSceneFile} 
                   imageUrl={sceneImageUrl}
-                  isDropZone={!!sceneImage && !isLoading}
+                  isDropZone={!!productImageFile && !isLoading}
                   onProductDrop={handleProductDrop}
                   persistedOrbPosition={persistedOrbPosition}
                   showDebugButton={!!debugImageUrl && !isLoading}
@@ -529,9 +535,15 @@ const App: React.FC = () => {
              </div>
            ) : (
             <div className="w-full">
-              <p className="text-zinc-500 animate-fade-in mb-4">
-                  Drag the product onto a location in the scene, or simply click where you want it.
-              </p>
+              {productImageFile ? (
+                <p className="text-zinc-500 animate-fade-in mb-4">
+                    Drag the product onto the scene, <b>or</b> use the chatbot below to edit the scene first.
+                </p>
+              ) : (
+                <p className="text-zinc-500 animate-fade-in mb-4">
+                  Use the chatbot to edit the scene, or upload a product to place it.
+                </p>
+              )}
               <Chat 
                 onChatSubmit={handleChatSubmit} 
                 isLoading={isChatLoading} 

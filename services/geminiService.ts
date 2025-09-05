@@ -402,7 +402,7 @@ export const editImageWithChat = async (
     
     const fullPrompt = `
 **Role:** You are a helpful and expert AI photo editor.
-**Task:** Edit the provided image based on the user's request.
+**Task:** Your ONLY task is to edit the single image provided, based on the user's request. Do not add any new objects unless explicitly asked.
 **User's Request:** "${prompt}"
 
 **Output Requirements:**

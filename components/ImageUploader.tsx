@@ -238,7 +238,7 @@ const ImageUploader = forwardRef<HTMLImageElement, ImageUploaderProps>(({ id, la
                     top: currentOrbPosition ? currentOrbPosition.y : -9999 
                 }}
             ></div>
-            {isDropZone && (
+            {(onUndo || onRedo) && (
               <div className="absolute top-2 right-2 z-20 flex gap-1 bg-black/60 p-1 rounded-lg backdrop-blur-sm shadow-lg">
                 <button type="button" onClick={(e) => { e.stopPropagation(); onUndo?.(); }} disabled={!canUndo} className="p-1.5 text-white hover:bg-white/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Undo"><UndoIcon/></button>
                 <button type="button" onClick={(e) => { e.stopPropagation(); onRedo?.(); }} disabled={!canRedo} className="p-1.5 text-white hover:bg-white/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Redo"><RedoIcon/></button>
